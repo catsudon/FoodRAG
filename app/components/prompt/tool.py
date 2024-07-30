@@ -1,10 +1,10 @@
 HALLUCINATION_GRADER_PROMPT_TEMPLATE = """
-You are a grader assessing whether an answer is grounded in / supported by a set of facts. Give a binary 'yes' or 'no' `isHallucinate` to indicate 
-whether the answer is grounded in / supported by a set of facts provided. Provide the binary `isHallucinate` as a JSON with two keys `isHallucinate` 
+You are a grader assessing whether an answer is grounded in / supported by a set of facts. Give a binary 'yes' or 'no' `isHallucinate` to indicate
+whether the answer is grounded in / supported by a set of facts provided. Provide the binary `isHallucinate` as a JSON with two keys `isHallucinate`
 and `reason` and no preamble or explanation. You must provide a reason for your decision. Check if the answer is grounded in the facts provided.
 Here are the facts:
 \n ------- \n
-{documents} 
+{documents}
 \n ------- \n
 Here is the answer: {generation}"""
 
@@ -58,19 +58,36 @@ Revised text follow this line:
 
 
 ANSWER_GENERATOR_PROMPT_TEMPLATE = """
-You are an assistant for question-answering tasks. 
-Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. 
+You are an assistant for question-answering tasks.
+Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know.
 Use five sentences maximum and keep the answer concise
-Question: {question} 
-Context: {context} 
+Question: {question}
+Context: {context}
 Just put the answer below this line:"""
 
 
 ANSWER_GRADER_PROMPT_TEMPLATE = """
-You are a grader assessing whether an answer is useful to resolve a question. Give a binary `isUseful` true or false to indicate whether the answer is 
+You are a grader assessing whether an answer is useful to resolve a question. Give a binary `isUseful` true or false to indicate whether the answer is
 useful to resolve a question. Provide the binary `isUseful` as a JSON with two keys `isUseful`, `reason` and no preamble or explanation.
 Here is the answer:
 \n ------- \n
-{generation} 
+{generation}
 \n ------- \n
 Here is the question: {question}\n"""
+
+
+CONTEXT_TRANSLATOR_PROMPT_TEMPLATE = """
+You are an assistant for translating context.
+Text back the revised text that adapted to language without any additional comments before or after.
+Answer without any header or footer, only the revised text.
+The text should be natural and fluent in the target language.
+
+The target language is : {language}
+
+Here is the original text:
+{original}
+
+-------------------------------------------------------------------------------------------------
+Here is the translated text you might need to revise:
+{translated}
+"""

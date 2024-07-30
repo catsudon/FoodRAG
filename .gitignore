@@ -11,3 +11,4 @@ chroma*/
 extractor/
 assets/
 !runner.ipynb
+database/
