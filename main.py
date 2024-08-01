@@ -5,13 +5,16 @@ import json
 from chromadb import HttpClient
 from chromadb.config import Settings
 from langchain_core.messages import AIMessage, ToolMessage
+from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.graph.graph import CompiledGraph
 from langgraph.checkpoint.sqlite import SqliteSaver
-from app.components.core import GraphState, FileUploaded
+from app.components.core.state import SupervisorAgentState, FileUploaded
+from app.components.prompt import SUPERVISOR_AGENT_SYSTEM_PROPMT_TEMPLATE
 from app.components.database import BaseDatabaseToolkit, BaseVectorDatabaseToolkit
-from app.components.agent import FoodDataAgent
+from app.components.agent import FoodDataAgent, Assistant
+from app.components.prebuilt import SupervisorAgentRAG
 
 
 chat_memory = SqliteSaver.from_conn_string("database/chat_memory.db")
@@ -27,20 +30,20 @@ def get_food_agent():
     return FoodDataAgent(food_db, food_vector)
 
 
+@cl.cache
+def get_supervisor_agent():
+    prompt = ChatPromptTemplate.from_messages(
+        ("system", SUPERVISOR_AGENT_SYSTEM_PROPMT_TEMPLATE), ("placeholder", "{messages}"))
+    return SupervisorAgentRAG(
+        supervisor_prompt=prompt, supervisor_tools=[])
+
+
 @cl.on_chat_start
 def on_chat_start():
     food_agent = get_food_agent()
-    builder = StateGraph(GraphState)
-    builder.add_node("FOOD_DATA_AGENT", food_agent)
-    builder.add_node("tools", ToolNode(food_agent.get_tools()))
-    builder.add_edge(START, "FOOD_DATA_AGENT")
-    builder.add_edge("FOOD_DATA_AGENT", END)
-    builder.add_conditional_edges("FOOD_DATA_AGENT", tools_condition)
-    builder.add_edge("tools", "FOOD_DATA_AGENT")
-    builder.add_edge("tools", END)
+
     thread_id = str(uuid.uuid4())
-    assistant = builder.compile(checkpointer=chat_memory)
-    cl.user_session.set("assistant", assistant)
+    cl.user_session.set("assistant", food_agent)
     cl.user_session.set("thread_id", thread_id)
     cl.user_session.set("config", {"configurable": {"thread_id": thread_id}})
     cl.user_session.set("messages", set())
@@ -59,10 +62,9 @@ async def on_message(user_inp: cl.Message):
                                            type=user_inp.elements[0].type,
                                            url=user_inp.elements[0].url))
 
-    events = assistant.stream({"messages": ("user", user_inp.content), "uploaded_files": uploaded_files},
+    events = assistant.stream({"messages": ("user", user_inp.content)},
                               config, stream_mode="values")
     chat_history = cl.user_session.get("messages")
-    print(user_inp.elements)
     async with cl.Step("query assistant to respond to user input", type="run") as run_step:
         run_step.input = user_inp.content
         for event in events:
@@ -71,24 +73,34 @@ async def on_message(user_inp: cl.Message):
                     chat_history.add(message.id)
                     if isinstance(message, AIMessage):
                         await cl.Message(content=message.content, author="assistant").send()
-                        print(message)
-                        if message.tool_calls:
-                            async with cl.Step(", ".join([tool["name"] for tool in message.tool_calls]), type="tool") as tool_step:
-                                tool_step.input = message.tool_calls
-                    if isinstance(message, ToolMessage):
-                        tool_call_content = json.loads(message.content)
-                        tool_step.output = tool_call_content['answer']
+                        print("AI", message)
+                    elif isinstance(message, ToolMessage):
+                        async with cl.Step(message.name, type="tool") as tool_step:
+                            tool_step.input = message.content
         run_step.output = "Assistant response complete"
     snapshot = assistant.get_state(config)
-    print(snapshot)
+    print("Snapshot started!!")
     while snapshot.next:
-        print(snapshot)
+        user = await cl.AskActionMessage("Do you want to continue the conversation?", [
+            cl.Action("continue", "Yes"), cl.Action("stop", "No")], "assistant").send()
+        if user == "stop":
+            assistant.invoke({
+                "messages": [
+                    ToolMessage(
+                        tool_call_id=event["messages"][-1].tool_calls[0]["id"],
+                        content=f"API call denied by user. Continue assisting, accounting for the user's input.",
+                    )
+                ]
+            },
+                config,)
+        else:
+            assistant.invoke(None, config)
         snapshot = assistant.get_state(config)
     print("Snapshot ended!!")
     cl.user_session.set("messages", chat_history)
 
 
-@cl.on_chat_resume
+@ cl.on_chat_resume
 def on_chat_resume(thread: ThreadDict):
     thread_id = thread.get("id")
     cl.user_session.set("config", {"configurable": {"thread_id": thread_id}})

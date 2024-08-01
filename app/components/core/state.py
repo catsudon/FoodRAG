@@ -24,10 +24,10 @@ class GraphState(TypedDict):
 
 
 class TranslationState(TypedDict):
+    message_id: str
     original: str
     language: str | None
     translated: str | None
-    revised: str | None
 
 
 class DocumentRetrivalState(TypedDict):

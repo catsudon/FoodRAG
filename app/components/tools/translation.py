@@ -1,10 +1,14 @@
+from lingua import LanguageDetector
 from deep_translator import GoogleTranslator
+from langchain_core.tools import BaseTool
 from langchain_core.runnables import RunnableGenerator, RunnableConfig
-from langchain_nvidia_ai_endpoints import ChatNVIDIA
-from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from ..core.state import TranslationState
+from langchain_core.messages import HumanMessage, ToolMessage
+from langchain_nvidia_ai_endpoints import ChatNVIDIA
+from langchain_openai import ChatOpenAI
+from typing_extensions import Union
+from ..core.state import TranslationState, SupervisorAgentState
 from ..prompt import CONTEXT_TRANSLATOR_PROMPT_TEMPLATE
 
 
@@ -54,6 +58,48 @@ class ContextTranlatorOpenAI(RunnableGenerator):
         state["translated"] = self.__translator.translate(state["original"])
         state["revised"] = self.__translator.invoke(state, config)
         return state["revised"]
+
+
+class LanguageDetectorTool(BaseTool):
+    name = "language_detector"
+    description = "Detects the language of the user's input text and translate in to English for specialized agents."
+
+    def __init__(self, detector: LanguageDetector = LanguageDetector(), translator: GoogleTranslator = GoogleTranslator()):
+        self.__detector = detector
+        self.__translator = translator
+
+    def _run(self, state: SupervisorAgentState, config: RunnableConfig = None):
+        last_message = state['message'][-1]
+        if isinstance(last_message, HumanMessage):
+            language = self.__detector.detect_language_of(last_message.content)
+            translated = self.__translator.translate(last_message.content)
+            state["translation"].append(
+                TranslationState(
+                    message_id=last_message.id,
+                    original=last_message.content,
+                    language=language,
+                    translated=translated,
+                )
+            )
+            if language != "en":
+                state["message"].append(
+                    ToolMessage(
+                        tool_name="language_detector",
+                        tool_calls=[],
+                        content=f"Detected language: {
+                            language}. Don't forget to translate back before respond to the user.",
+                    ),
+                    HumanMessage(
+                        content=translated,
+                        kwargs={"original": last_message.content,
+                                "language": language, "translated": translated,
+                                "ref_message_id": last_message.id},
+                    )
+                )
+        return state
+
+
+class LanguageTranslateBackTool(BaseTool):
 
 
 if __name__ == "__main__":
