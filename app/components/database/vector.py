@@ -1,6 +1,6 @@
 from typing import List
 from langchain_openai.chat_models import ChatOpenAI
-from langchain_core.tools import BaseTool
+from langchain_core.tools import BaseTool, Tool, tool
 from langchain.chains.retrieval import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.documents import Document
@@ -58,7 +58,9 @@ class BaseVectorDatabaseToolkit:
 
     def store_document(self, document: Document | list[Document]):
         """
-        Store a document in the vector database.
+        Useful when you want to store a document in the vector database.
+        Not use this method to retrieve the document.
+
         Arg:
             document: (Document) Document object to store.
         """
@@ -67,7 +69,7 @@ class BaseVectorDatabaseToolkit:
 
     def store_image(self, image: str | list[str]):
         """
-        Store an image in the vector database.
+        Useful when you want to store an image in the vector database.
         Arg:
             image: (Image) PIL Image object.
         """
@@ -76,7 +78,8 @@ class BaseVectorDatabaseToolkit:
 
     def retrieve_document(self, query: str, limit: int = 5):
         """
-        Retrieve documents from the vector database.
+        Useful when you want to retrieve documents from the vector database.
+
         Arg:
             query: (str) Query to retrieve documents.
             limit: (int) Number of documents to retrieve.
@@ -86,7 +89,75 @@ class BaseVectorDatabaseToolkit:
         return self.__retrieval_chain.invoke({"input": query, "limit": limit})
 
     def get_tools(self) -> List[BaseTool]:
-        return [self.load_pdf, self.load_image, self.store_document, self.store_image, self.retrieve_document]
+        return self.get_retriver() + self.get_actionor()
+
+    def get_sensitive_tools(self) -> List[BaseTool]:
+        return self.get_actionor()
+
+    def get_non_sensitive_tools(self) -> List[BaseTool]:
+        return self.get_retriver()
+
+    def get_retriver(self):
+        @tool(parse_docstring=True)
+        def retrieve_document(query: str, limit: int = 5):
+            """ Useful when you want to retrieve documents from the vector database.
+
+            Args:
+                query: (str) Query to retrieve documents.
+                limit: (int) Number of documents to retrieve.
+
+            Returns:
+                list: List of Document objects.
+            """
+            return self.retrieve_document(query, limit)
+        return [retrieve_document]
+
+    def get_actionor(self):
+        @tool(parse_docstring=True)
+        def load_pdf(path: str):
+            """ Useful when you want to read and summarize a PDF document.
+
+            Args:
+                path: (str) Path to the PDF file.
+
+            Returns:
+                list: List of Document objects.
+            """
+            return self.load_pdf(path)
+
+        @tool(parse_docstring=True)
+        def load_image(path: str):
+            """ Useful when you want to read and scan the context of image.
+
+            Args:
+                path: (str) Path to the image file.
+
+            Returns:
+                (Document, Image): Document object and PIL Image object.
+            """
+            return self.load_image(path)
+
+        @tool(parse_docstring=True)
+        def store_document(document: Document | list[Document]):
+            """
+            Useful when you want to store a document in the vector database.
+            Not use this method to retrieve the document.
+
+            Args:
+                document: (Document) Document object to store.
+            """
+            self.store_document(document)
+
+        @tool(parse_docstring=True)
+        def store_image(image: str | list[str]):
+            """
+            Useful when you want to store an image in the vector database.
+
+            Args:
+                image: (Image) PIL Image object.
+            """
+            self.store_image(image)
+        return [load_pdf, load_image, store_document, store_image]
 
     def invoke(self, state: dict, config=None):
         return self.__agent.invoke(state, config)

@@ -1,8 +1,4 @@
-from typing import Annotated
-from typing_extensions import TypedDict
-from langgraph.graph.message import AnyMessage, add_messages
 from langchain_core.runnables import Runnable, RunnableConfig
-from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import tool
@@ -13,32 +9,6 @@ from langgraph.prebuilt import tools_condition
 import dotenv
 import os
 from state import GraphState
-from app.components.llm.nvidia import AgentNVIDIA, TooledChatNVIDIA
-
-from langchain_core.messages import ToolMessage
-from langchain_core.runnables import RunnableLambda
-
-from langgraph.prebuilt import ToolNode
-
-
-def handle_tool_error(state) -> dict:
-    error = state.get("error")
-    tool_calls = state["messages"][-1].tool_calls
-    return {
-        "messages": [
-            ToolMessage(
-                content=f"Error: {repr(error)}\n please fix your mistakes.",
-                tool_call_id=tc["id"],
-            )
-            for tc in tool_calls
-        ]
-    }
-
-
-def create_tool_node_with_fallback(tools: list) -> dict:
-    return ToolNode(tools).with_fallbacks(
-        [RunnableLambda(handle_tool_error)], exception_key="error"
-    )
 
 
 def load_env():
@@ -97,7 +67,8 @@ class Assistant:
                 or isinstance(result.content, list)
                 and not result.content[0].get("text")
             ):
-                messages = state["messages"] + [("user", "Respond with a real output.")]
+                messages = state["messages"] + \
+                    [("user", "Respond with a real output.")]
                 state = {**state, "messages": messages}
             else:
                 break
@@ -105,9 +76,7 @@ class Assistant:
 
 
 chat_tools = [get_user_info, recommend_food]
-# llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-llm = TooledChatNVIDIA(temperature=0)
-# llm = ChatNVIDIA(temperature=0.1)
+llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
 chat_prompt = ChatPromptTemplate.from_messages(
     [
@@ -147,9 +116,6 @@ tutorial_questions = [
 
 config = {
     "configurable": {
-        # The passenger_id is used in our flight tools to
-        # fetch the user's flight information
-        # Checkpoints are accessed by thread_id
         "thread_id": "1",
     }
 }

@@ -91,3 +91,15 @@ Here is the original text:
 Here is the translated text you might need to revise:
 {translated}
 """
+
+PROMPTER_PROMPT_TEMPLATE = """
+You are an assistant for creating a user friendly content for prompting user.
+Using the context related to the one provided below:
+
+{context}
+
+And here is the purpose of the prompt: {question}
+
+Just answer in the format of JSON with single key named `prompt` without any prefix or declaration.
+example: { "prompt" : "Confirm adding the data?" }
+"""

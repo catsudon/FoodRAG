@@ -1,1 +1,1 @@
-from .food import FoodDataAgent
+from .food import FoodDataAgent, FoodDataManagerAgent
