@@ -164,8 +164,8 @@ async def on_audio_end(elements: list):
         print(f"Audio saved successfully as '{output_filename}'.")
         convert_webm_to_wav("tmp/output_audio.webm", "tmp/output_audio.wav")
 
-        transcribed_text = ASR("tmp/output_audio.wav")
-        print(transcribed_text)
+        # transcribed_text = ASR("tmp/output_audio.wav")
+        # print(transcribed_text)
 
     except Exception as e:
         print(f"Error saving audio: {e}")
