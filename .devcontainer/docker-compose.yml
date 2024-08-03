@@ -22,8 +22,8 @@ services:
     container_name: postgres
     image: postgres:latest
     restart: unless-stopped
-    volumes:
-      - ./postgres-data:/var/lib/postgresql/data
+    # volumes:
+    #   - ./postgres-data:/var/lib/postgresql/data
     environment:
       POSTGRES_USER: postgres
       POSTGRES_DB: postgres
@@ -32,8 +32,8 @@ services:
   chroma:
     container_name: chroma
     image: chromadb/chroma
-    volumes:
-      - ./chroma-data:/chroma/chroma
+    # volumes:
+    #   - ./chroma-data:/chroma/chroma
     command: "--workers 1 --host 0.0.0.0 --port 8000 --proxy-headers --log-config chromadb/log_config.yml --timeout-keep-alive 30"
     environment:
       - IS_PERSISTENT=TRUE
@@ -58,11 +58,32 @@ services:
       - NEO4J_apoc_import_file_enabled=true
       - NEO4J_apoc_import_file_use__neo4j__config=true
       - NEO4J_PLUGINS=["apoc", "graph-data-science"]
+    # volumes:
+    #   - ./neo4j_db/data:/data
+    #   - ./neo4j_db/logs:/logs
+    #   - ./neo4j_db/import:/var/lib/neo4j/import
+    #   - ./neo4j_db/plugins:/plugins
+
+  riva_server:
+    container_name: riva_server
+    image: nvcr.io/nvidia/riva/riva-speech:2.15.0
+    environment:
+      - "SERVICE_TYPE=asr,tts"  # Enable both ASR and TTS
+      - "ENABLE_NEW_API=true"
+    ports:
+      - "8888:8888"  # Default API endpoint
+      - "8889:8889"  # gRPC endpoint
     volumes:
-      - ./neo4j_db/data:/data
-      - ./neo4j_db/logs:/logs
-      - ./neo4j_db/import:/var/lib/neo4j/import
-      - ./neo4j_db/plugins:/plugins
+      - ./models:/data/models  # Mount your model directory
+      - ./riva_config:/data/config  # Mount your Riva config directory
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
 
 networks:
   default:

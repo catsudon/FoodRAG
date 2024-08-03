@@ -1,5 +1,6 @@
 import chainlit as cl
 from chainlit.types import ThreadDict
+from chainlit.element import ElementBased
 import uuid
 import json
 from chromadb import HttpClient
@@ -15,7 +16,6 @@ from app.components.prompt import SUPERVISOR_AGENT_SYSTEM_PROPMT_TEMPLATE
 from app.components.database import BaseDatabaseToolkit, BaseVectorDatabaseToolkit
 from app.components.agent import FoodDataAgent, Assistant
 from app.components.prebuilt import SupervisorAgentRAG
-
 
 chat_memory = SqliteSaver.from_conn_string("database/chat_memory.db")
 
@@ -100,7 +100,7 @@ async def on_message(user_inp: cl.Message):
     cl.user_session.set("messages", chat_history)
 
 
-@ cl.on_chat_resume
+@cl.on_chat_resume
 def on_chat_resume(thread: ThreadDict):
     thread_id = thread.get("id")
     cl.user_session.set("config", {"configurable": {"thread_id": thread_id}})
@@ -110,3 +110,62 @@ def on_chat_resume(thread: ThreadDict):
     cl.user_session.set("thread_id", thread_id)
     cl.user_session.set("messages", set())
     print("Chat resumed!!")
+
+
+
+@cl.on_chat_start
+async def start():
+    await cl.Message(
+        content="Welcome to the Chainlit audio example. Press `P` to talk!"
+    ).send()
+
+
+
+
+
+from io import BytesIO
+from pydub import AudioSegment
+from utils.webm2wav import convert_webm_to_wav
+from utils.ASR import ASR
+
+@cl.on_audio_chunk
+async def on_audio_chunk(chunk: cl.AudioChunk):
+    if chunk.isStart:
+        print("Starting new audio stream...")
+        buffer = BytesIO()
+        # Initialize the session for a new audio stream
+        cl.user_session.set("audio_buffer", buffer)
+        cl.user_session.set("audio_mime_type", chunk.mimeType)
+        print("Initialized buffer and stored in session.")
+
+    # Retrieve the buffer and write the incoming chunk
+    buffer = cl.user_session.get("audio_buffer")
+    if buffer is not None:
+        buffer.write(chunk.data)
+        print(f"Appended chunk to buffer. Buffer size: {buffer.tell()} bytes.")
+    else:
+        print("Error: Buffer not found in session.")
+
+@cl.on_audio_end
+async def on_audio_end(elements: list):
+    # Retrieve the audio buffer from the session
+    audio_buffer = cl.user_session.get("audio_buffer")
+    if audio_buffer is None:
+        print("Error: Audio buffer is None.")
+        return
+
+    audio_buffer.seek(0)  # Rewind the buffer to the beginning
+
+    # Save the buffer as a webm file
+    output_filename = "tmp/output_audio.webm"
+    try:
+        with open(output_filename, "wb") as f:
+            f.write(audio_buffer.getvalue())
+        print(f"Audio saved successfully as '{output_filename}'.")
+        convert_webm_to_wav("tmp/output_audio.webm", "tmp/output_audio.wav")
+
+        transcribed_text = ASR("tmp/output_audio.wav")
+        print(transcribed_text)
+
+    except Exception as e:
+        print(f"Error saving audio: {e}")
